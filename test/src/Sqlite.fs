@@ -23,7 +23,7 @@ let ``listAuthors returns empty list on fresh db`` () =
   use conn = createConnection ()
   let db = DB(conn)
   let result = db.ListAuthors()
-  test <@ result = [] @>
+  test <@ result.Count = 0 @>
 
 [<Fact>]
 let ``createAuthor inserts and returns the author`` () =
@@ -62,7 +62,7 @@ let ``deleteAuthor removes the author`` () =
   db.CreateAuthor("Alice", "Bio") |> ignore
   db.DeleteAuthor 1 |> ignore
   let result = db.ListAuthors()
-  test <@ result = [] @>
+  test <@ result.Count = 0 @>
 
 [<Fact>]
 let ``listAuthors returns all authors in name order`` () =
@@ -73,7 +73,7 @@ let ``listAuthors returns all authors in name order`` () =
   db.CreateAuthor("Bob") |> ignore
 
   let result = db.ListAuthors()
-  let names = result |> List.map (fun a -> a.Name)
+  let names = result |> Seq.map (fun a -> a.Name) |> Seq.toList
   test <@ names = [ "Alice"; "Bob"; "Charlie" ] @>
 
 [<Fact>]
@@ -123,3 +123,22 @@ let ``getEmbedding round trips float32 array`` () =
   let (ValueSome e) = db.CreateEmbedding embedding
   let result = db.GetEmbedding e.Id
   test <@ result |> ValueOption.map (fun x -> x.Embedding) = ValueSome embedding @>
+
+[<Fact>]
+let ``createEvent with reserved keyword column`` () =
+  use conn = createConnection ()
+  let db = DB(conn)
+  let result = db.CreateEvent("click", "btn")
+  test <@ result |> ValueOption.map (fun x -> x.Type, x.Val) = ValueSome("click", Some "btn") @>
+
+[<Fact>]
+let ``getEventsByType filters by type`` () =
+  use conn = createConnection ()
+  let db = DB(conn)
+  db.CreateEvent("click", "a") |> ignore
+  db.CreateEvent("hover", "b") |> ignore
+  db.CreateEvent("click", "c") |> ignore
+
+  let result = db.GetEventsByType("click")
+  let vals = result |> Seq.map (fun e -> e.Val) |> Seq.toList
+  test <@ vals = [ Some "a"; Some "c" ] @>

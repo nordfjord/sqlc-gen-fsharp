@@ -52,3 +52,10 @@ module Readers =
           .Cast<byte, float32>(ReadOnlySpan<byte>(r.GetValue(r.GetOrdinal("embedding")) :?> byte[]))
           .ToArray()
     }
+
+  let eventReader (r: IDataReader) : Event =
+    {
+      Event.Id = r.GetInt32(r.GetOrdinal("id"))
+      Type = r.GetString(r.GetOrdinal("type"))
+      Val = if r.IsDBNull(r.GetOrdinal("val")) then None else Some(r.GetString(r.GetOrdinal("val")))
+    }

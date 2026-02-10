@@ -17,3 +17,9 @@ CREATE TABLE embeddings (
   id   INTEGER PRIMARY KEY,
   embedding F32_BLOB(1536) NOT NULL
 );
+
+CREATE TABLE events (
+  id   INTEGER PRIMARY KEY,
+  type TEXT NOT NULL,
+  val  TEXT
+);

@@ -24,6 +24,8 @@ type Author =
 
 type Embedding = { Id: int; Embedding: float32[] }
 
+type Event = { Id: int; Type: string; Val: string option }
+
 type GetAuthor2Row = { Id: int; Name: string; Bio: string option }
 
 type TotalBooksRow = { Cnt: int; TotalBooks: double option }

@@ -19,6 +19,42 @@ import (
 
 var fsIdentPattern = regexp.MustCompile("[^a-zA-Z0-9_]+")
 
+// fsharpKeywords is the set of F# reserved keywords (all lowercase).
+// See https://learn.microsoft.com/en-us/dotnet/fsharp/language-reference/keyword-reference
+var fsharpKeywords = map[string]bool{
+	"abstract": true, "and": true, "as": true, "assert": true,
+	"base": true, "begin": true,
+	"class":   true,
+	"default": true, "delegate": true, "do": true, "done": true,
+	"downcast": true, "downto": true,
+	"elif": true, "else": true, "end": true, "exception": true, "extern": true,
+	"false": true, "finally": true, "fixed": true, "for": true, "fun": true, "function": true,
+	"global": true,
+	"if":     true, "in": true, "inherit": true, "inline": true, "interface": true, "internal": true,
+	"lazy": true, "let": true,
+	"match": true, "member": true, "module": true, "mutable": true,
+	"namespace": true, "new": true, "not": true, "null": true,
+	"of": true, "open": true, "or": true, "override": true,
+	"private": true, "public": true,
+	"rec": true, "return": true,
+	"select": true, "static": true, "struct": true,
+	"then": true, "to": true, "true": true, "try": true, "type": true,
+	"upcast": true, "use": true,
+	"val": true, "void": true,
+	"when": true, "while": true, "with": true,
+	"yield": true,
+	// OCaml reserved words that are also reserved in F#
+	"asr": true, "land": true, "lor": true, "lsl": true, "lsr": true, "lxor": true, "mod": true, "sig": true,
+}
+
+// FsIdent wraps an identifier in double backticks if it is an F# reserved keyword.
+func FsIdent(name string) string {
+	if fsharpKeywords[name] {
+		return "``" + name + "``"
+	}
+	return name
+}
+
 type Constant struct {
 	Name  string
 	Type  string
@@ -91,12 +127,12 @@ func (v Params) Args() string {
 	var optionalArgs []string
 	fields := v.Struct.Fields
 	for _, f := range fields {
-
+		name := FsIdent(f.Name)
 		if f.Type.IsNull {
 			typ := strings.TrimSuffix(f.Type.String(), " option")
-			optionalArgs = append(optionalArgs, "?"+f.Name+": "+typ)
+			optionalArgs = append(optionalArgs, "?"+name+": "+typ)
 		} else {
-			requiredArgs = append(requiredArgs, f.Name+": "+f.Type.String())
+			requiredArgs = append(requiredArgs, name+": "+f.Type.String())
 		}
 
 	}
@@ -109,7 +145,7 @@ func (v Params) Bindings(engine string) []string {
 	var out []string
 
 	for _, f := range v.Struct.Fields {
-		item := fmt.Sprintf(`("%s", Sql.%s %s)`, f.Type.DbName, f.Type.LibTyp, f.Name)
+		item := fmt.Sprintf(`("%s", Sql.%s %s)`, f.Type.DbName, f.Type.LibTyp, FsIdent(f.Name))
 		out = append(out, item)
 	}
 
@@ -421,17 +457,18 @@ func (t TmplCtx) ConnPipeline(q Query) []string {
 	// Add parameters
 	if !q.Arg.isEmpty() {
 		for _, f := range q.Arg.Struct.Fields {
+			name := FsIdent(f.Name)
 			var valueExpr string
 			if f.Type.ReaderTyp == "GetF32Blob" {
 				if f.Type.IsNull {
-					valueExpr = fmt.Sprintf("match %s with Some v -> box (MemoryMarshal.AsBytes<float32>(ReadOnlySpan<float32>(v)).ToArray()) | None -> box DBNull.Value", f.Name)
+					valueExpr = fmt.Sprintf("match %s with Some v -> box (MemoryMarshal.AsBytes<float32>(ReadOnlySpan<float32>(v)).ToArray()) | None -> box DBNull.Value", name)
 				} else {
-					valueExpr = fmt.Sprintf("box (MemoryMarshal.AsBytes<float32>(ReadOnlySpan<float32>(%s)).ToArray())", f.Name)
+					valueExpr = fmt.Sprintf("box (MemoryMarshal.AsBytes<float32>(ReadOnlySpan<float32>(%s)).ToArray())", name)
 				}
 			} else if f.Type.IsNull {
-				valueExpr = fmt.Sprintf("match %s with Some v -> box v | None -> box DBNull.Value", f.Name)
+				valueExpr = fmt.Sprintf("match %s with Some v -> box v | None -> box DBNull.Value", name)
 			} else {
-				valueExpr = fmt.Sprintf("box %s", f.Name)
+				valueExpr = fmt.Sprintf("box %s", name)
 			}
 			out = append(out, fmt.Sprintf(`cmd.Parameters.Add(cmd.CreateParameter(ParameterName = "@%s", Value = %s)) |> ignore`, f.Type.DbName, valueExpr))
 		}
@@ -453,16 +490,16 @@ func (t TmplCtx) ConnPipeline(q Query) []string {
 		out = append(out, "  ValueNone")
 	case ":many":
 		out = append(out, "use rdr = cmd.ExecuteReader()")
-		out = append(out, "let mutable results = []")
+		out = append(out, "let results = ResizeArray()")
 		out = append(out, "while rdr.Read() do")
 		if q.Ret.IsStruct() {
 			reader := sdk.LowerTitle(q.Ret.Type()) + "Reader"
-			out = append(out, "  results <- ("+reader+" rdr) :: results")
+			out = append(out, "  results.Add("+reader+" rdr)")
 		} else {
 			expr := scalarReaderExpr(q.Ret.Typ)
-			out = append(out, "  results <- ("+expr+") :: results")
+			out = append(out, "  results.Add("+expr+")")
 		}
-		out = append(out, "List.rev results")
+		out = append(out, "results")
 	default:
 		out = append(out, "cmd.ExecuteNonQuery()")
 	}

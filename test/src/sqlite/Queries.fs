@@ -88,11 +88,22 @@ RETURNING id, embedding
   """
 
   [<Literal>]
-  let searchEmbeddings =
+  let createEvent =
     """
-    SELECT e.id, e.embedding
-FROM embeddings e
-JOIN vector_top_k('embeddings_idx', ?1, ?2) AS vt ON e.id = vt.rowid
+    INSERT INTO events (
+  type, val
+) VALUES (
+  @type, @val
+)
+RETURNING id, type, val
+  """
+
+  [<Literal>]
+  let getEventsByType =
+    """
+    SELECT id, type, val FROM events
+WHERE type = @type
+ORDER BY id
   """
 
 [<RequireQualifiedAccessAttribute>]
@@ -125,12 +136,12 @@ type DB(conn: IDbConnection) =
     use cmd = conn.CreateCommand()
     cmd.CommandText <- Sqls.listAuthors
     use rdr = cmd.ExecuteReader()
-    let mutable results = []
+    let results = ResizeArray()
 
     while rdr.Read() do
-      results <- (authorReader rdr) :: results
+      results.Add(authorReader rdr)
 
-    List.rev results
+    results
 
   member _.CreateAuthor(name: string, ?bio: string) =
 
@@ -212,14 +223,40 @@ type DB(conn: IDbConnection) =
     use rdr = cmd.ExecuteReader()
     if rdr.Read() then ValueSome(embeddingReader rdr) else ValueNone
 
-  member _.SearchEmbeddings() =
+  member _.CreateEvent(``type``: string, ?``val``: string) =
 
     use cmd = conn.CreateCommand()
-    cmd.CommandText <- Sqls.searchEmbeddings
+    cmd.CommandText <- Sqls.createEvent
+
+    cmd.Parameters.Add(cmd.CreateParameter(ParameterName = "@type", Value = box ``type``))
+    |> ignore
+
+    cmd.Parameters.Add(
+      cmd.CreateParameter(
+        ParameterName = "@val",
+        Value =
+          match ``val`` with
+          | Some v -> box v
+          | None -> box DBNull.Value
+      )
+    )
+    |> ignore
+
     use rdr = cmd.ExecuteReader()
-    let mutable results = []
+    if rdr.Read() then ValueSome(eventReader rdr) else ValueNone
+
+  member _.GetEventsByType(``type``: string) =
+
+    use cmd = conn.CreateCommand()
+    cmd.CommandText <- Sqls.getEventsByType
+
+    cmd.Parameters.Add(cmd.CreateParameter(ParameterName = "@type", Value = box ``type``))
+    |> ignore
+
+    use rdr = cmd.ExecuteReader()
+    let results = ResizeArray()
 
     while rdr.Read() do
-      results <- (embeddingReader rdr) :: results
+      results.Add(eventReader rdr)
 
-    List.rev results
+    results

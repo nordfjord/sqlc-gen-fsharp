@@ -43,3 +43,16 @@ INSERT INTO embeddings (
   @embedding
 )
 RETURNING *;
+
+-- name: CreateEvent :one
+INSERT INTO events (
+  type, val
+) VALUES (
+  @type, @val
+)
+RETURNING *;
+
+-- name: GetEventsByType :many
+SELECT * FROM events
+WHERE type = @type
+ORDER BY id;
