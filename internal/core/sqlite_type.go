@@ -3,14 +3,14 @@ package core
 import (
 	"strings"
 
-	plugin "github.com/tabbed/sqlc-go/codegen"
-	"github.com/tabbed/sqlc-go/sdk"
+	"github.com/sqlc-dev/plugin-sdk-go/plugin"
+	"github.com/sqlc-dev/plugin-sdk-go/sdk"
 )
 
 // https://learn.microsoft.com/en-us/dotnet/standard/data/sqlite/types
 // ReaderTyp now stores ADO.NET IDataReader getter method names (e.g. GetInt32, GetString)
 // Nullability is handled separately via IsNull + IsDBNull checks in the reader/pipeline generation
-func sqliteType(req *plugin.CodeGenRequest, col *plugin.Column) (string, string, string, bool) {
+func sqliteType(req *plugin.GenerateRequest, col *plugin.Column) (string, string, string, bool) {
 
 	columnType := strings.ToLower(sdk.DataType(col.Type))
 	notNull := col.NotNull || col.IsArray
@@ -19,9 +19,9 @@ func sqliteType(req *plugin.CodeGenRequest, col *plugin.Column) (string, string,
 
 	case "int", "integer", "tinyint", "smallint", "mediumint", "bigint", "unsignedbigint", "int2", "int8":
 		if notNull {
-			return "int", "GetInt32", "int", false
+			return "int64", "GetInt64", "int64", false
 		} else {
-			return "int option", "GetInt32", "intOrNone", false
+			return "int64 option", "GetInt64", "int64OrNone", false
 		}
 	case "blob":
 		if notNull {

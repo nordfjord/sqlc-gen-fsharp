@@ -9,16 +9,32 @@ open System.Data
 
 module Readers =
 
+  let embeddingReader (r: IDataReader) : Embedding =
+    {
+      Embedding.Id = r.GetInt64(r.GetOrdinal("id"))
+      Embedding =
+        MemoryMarshal
+          .Cast<byte, float32>(ReadOnlySpan<byte>(r.GetValue(r.GetOrdinal("embedding")) :?> byte[]))
+          .ToArray()
+    }
+
+  let eventReader (r: IDataReader) : Event =
+    {
+      Event.Id = r.GetInt64(r.GetOrdinal("id"))
+      Type = r.GetString(r.GetOrdinal("type"))
+      Val = if r.IsDBNull(r.GetOrdinal("val")) then None else Some(r.GetString(r.GetOrdinal("val")))
+    }
+
   let getAuthor2RowReader (r: IDataReader) : GetAuthor2Row =
     {
-      GetAuthor2Row.Id = r.GetInt32(r.GetOrdinal("id"))
+      GetAuthor2Row.Id = r.GetInt64(r.GetOrdinal("id"))
       Name = r.GetString(r.GetOrdinal("name"))
       Bio = if r.IsDBNull(r.GetOrdinal("bio")) then None else Some(r.GetString(r.GetOrdinal("bio")))
     }
 
   let authorReader (r: IDataReader) : Author =
     {
-      Author.Id = r.GetInt32(r.GetOrdinal("id"))
+      Author.Id = r.GetInt64(r.GetOrdinal("id"))
       Name = r.GetString(r.GetOrdinal("name"))
       Bio = if r.IsDBNull(r.GetOrdinal("bio")) then None else Some(r.GetString(r.GetOrdinal("bio")))
       Address = if r.IsDBNull(r.GetOrdinal("address")) then None else Some(r.GetString(r.GetOrdinal("address")))
@@ -39,23 +55,7 @@ module Readers =
 
   let totalBooksRowReader (r: IDataReader) : TotalBooksRow =
     {
-      TotalBooksRow.Cnt = r.GetInt32(r.GetOrdinal("cnt"))
+      TotalBooksRow.Cnt = r.GetInt64(r.GetOrdinal("cnt"))
       TotalBooks =
         if r.IsDBNull(r.GetOrdinal("total_books")) then None else Some(r.GetDouble(r.GetOrdinal("total_books")))
-    }
-
-  let embeddingReader (r: IDataReader) : Embedding =
-    {
-      Embedding.Id = r.GetInt32(r.GetOrdinal("id"))
-      Embedding =
-        MemoryMarshal
-          .Cast<byte, float32>(ReadOnlySpan<byte>(r.GetValue(r.GetOrdinal("embedding")) :?> byte[]))
-          .ToArray()
-    }
-
-  let eventReader (r: IDataReader) : Event =
-    {
-      Event.Id = r.GetInt32(r.GetOrdinal("id"))
-      Type = r.GetString(r.GetOrdinal("type"))
-      Val = if r.IsDBNull(r.GetOrdinal("val")) then None else Some(r.GetString(r.GetOrdinal("val")))
     }

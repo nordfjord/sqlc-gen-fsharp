@@ -106,28 +106,42 @@ WHERE type = @type
 ORDER BY id
   """
 
+  [<Literal>]
+  let maxAuthorId =
+    """
+    SELECT CAST(max(id) AS INTEGER) as max_id from authors
+  """
+
+  [<Literal>]
+  let getAuthorsByIds =
+    """
+    SELECT id, name, bio, address, date_of_birth, last_ts, savings_amt, loan_amt, disabled, married, payable FROM authors
+WHERE id IN (/*SLICE:ids*/)
+ORDER BY id
+  """
+
 [<RequireQualifiedAccessAttribute>]
 type DB(conn: IDbConnection) =
 
-  member _.GetAuthor2(id: int) =
+  member _.GetAuthor2(id: int64) =
 
     use cmd = conn.CreateCommand()
-    cmd.CommandText <- Sqls.getAuthor2
 
     cmd.Parameters.Add(cmd.CreateParameter(ParameterName = "@id", Value = box id))
     |> ignore
 
+    cmd.CommandText <- Sqls.getAuthor2
     use rdr = cmd.ExecuteReader()
     if rdr.Read() then ValueSome(getAuthor2RowReader rdr) else ValueNone
 
-  member _.GetAuthor(id: int) =
+  member _.GetAuthor(id: int64) =
 
     use cmd = conn.CreateCommand()
-    cmd.CommandText <- Sqls.getAuthor
 
     cmd.Parameters.Add(cmd.CreateParameter(ParameterName = "@id", Value = box id))
     |> ignore
 
+    cmd.CommandText <- Sqls.getAuthor
     use rdr = cmd.ExecuteReader()
     if rdr.Read() then ValueSome(authorReader rdr) else ValueNone
 
@@ -146,7 +160,6 @@ type DB(conn: IDbConnection) =
   member _.CreateAuthor(name: string, ?bio: string) =
 
     use cmd = conn.CreateCommand()
-    cmd.CommandText <- Sqls.createAuthor
 
     cmd.Parameters.Add(cmd.CreateParameter(ParameterName = "@name", Value = box name))
     |> ignore
@@ -162,17 +175,18 @@ type DB(conn: IDbConnection) =
     )
     |> ignore
 
+    cmd.CommandText <- Sqls.createAuthor
     use rdr = cmd.ExecuteReader()
     if rdr.Read() then ValueSome(authorReader rdr) else ValueNone
 
-  member _.DeleteAuthor(id: int) =
+  member _.DeleteAuthor(id: int64) =
 
     use cmd = conn.CreateCommand()
-    cmd.CommandText <- Sqls.deleteAuthor
 
     cmd.Parameters.Add(cmd.CreateParameter(ParameterName = "@id", Value = box id))
     |> ignore
 
+    cmd.CommandText <- Sqls.deleteAuthor
     cmd.ExecuteNonQuery()
 
   member _.CountAuthors() =
@@ -180,7 +194,7 @@ type DB(conn: IDbConnection) =
     use cmd = conn.CreateCommand()
     cmd.CommandText <- Sqls.countAuthors
     use rdr = cmd.ExecuteReader()
-    if rdr.Read() then ValueSome(rdr.GetInt32(rdr.GetOrdinal("cnt"))) else ValueNone
+    if rdr.Read() then ValueSome(rdr.GetInt64(rdr.GetOrdinal("cnt"))) else ValueNone
 
   member _.TotalBooks() =
 
@@ -196,21 +210,20 @@ type DB(conn: IDbConnection) =
     use rdr = cmd.ExecuteReader()
     if rdr.Read() then ValueSome(rdr.GetString(rdr.GetOrdinal("str"))) else ValueNone
 
-  member _.GetEmbedding(id: int) =
+  member _.GetEmbedding(id: int64) =
 
     use cmd = conn.CreateCommand()
-    cmd.CommandText <- Sqls.getEmbedding
 
     cmd.Parameters.Add(cmd.CreateParameter(ParameterName = "@id", Value = box id))
     |> ignore
 
+    cmd.CommandText <- Sqls.getEmbedding
     use rdr = cmd.ExecuteReader()
     if rdr.Read() then ValueSome(embeddingReader rdr) else ValueNone
 
   member _.CreateEmbedding(embedding: float32[]) =
 
     use cmd = conn.CreateCommand()
-    cmd.CommandText <- Sqls.createEmbedding
 
     cmd.Parameters.Add(
       cmd.CreateParameter(
@@ -220,13 +233,13 @@ type DB(conn: IDbConnection) =
     )
     |> ignore
 
+    cmd.CommandText <- Sqls.createEmbedding
     use rdr = cmd.ExecuteReader()
     if rdr.Read() then ValueSome(embeddingReader rdr) else ValueNone
 
   member _.CreateEvent(``type``: string, ?``val``: string) =
 
     use cmd = conn.CreateCommand()
-    cmd.CommandText <- Sqls.createEvent
 
     cmd.Parameters.Add(cmd.CreateParameter(ParameterName = "@type", Value = box ``type``))
     |> ignore
@@ -242,21 +255,56 @@ type DB(conn: IDbConnection) =
     )
     |> ignore
 
+    cmd.CommandText <- Sqls.createEvent
     use rdr = cmd.ExecuteReader()
     if rdr.Read() then ValueSome(eventReader rdr) else ValueNone
 
   member _.GetEventsByType(``type``: string) =
 
     use cmd = conn.CreateCommand()
-    cmd.CommandText <- Sqls.getEventsByType
 
     cmd.Parameters.Add(cmd.CreateParameter(ParameterName = "@type", Value = box ``type``))
     |> ignore
 
+    cmd.CommandText <- Sqls.getEventsByType
     use rdr = cmd.ExecuteReader()
     let results = ResizeArray()
 
     while rdr.Read() do
       results.Add(eventReader rdr)
+
+    results
+
+  member _.MaxAuthorId() =
+
+    use cmd = conn.CreateCommand()
+    cmd.CommandText <- Sqls.maxAuthorId
+    use rdr = cmd.ExecuteReader()
+    if rdr.Read() then ValueSome(rdr.GetInt64(rdr.GetOrdinal("max_id"))) else ValueNone
+
+  member _.GetAuthorsByIds(ids: int64 seq) =
+
+    use cmd = conn.CreateCommand()
+    let mutable commandText = Sqls.getAuthorsByIds
+    let idsPlaceholders = ids |> Seq.mapi (fun i _ -> sprintf "@ids_%d" i) |> String.concat ", "
+
+    commandText <-
+      if Seq.isEmpty ids then
+        commandText.Replace("/*SLICE:ids*/", "NULL")
+      else
+        commandText.Replace("/*SLICE:ids*/", idsPlaceholders)
+
+    ids
+    |> Seq.iteri (fun i v ->
+      cmd.Parameters.Add(cmd.CreateParameter(ParameterName = (sprintf "@ids_%d" i), Value = box v))
+      |> ignore
+    )
+
+    cmd.CommandText <- commandText
+    use rdr = cmd.ExecuteReader()
+    let results = ResizeArray()
+
+    while rdr.Read() do
+      results.Add(authorReader rdr)
 
     results

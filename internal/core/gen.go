@@ -10,9 +10,9 @@ import (
 	"strings"
 
 	easyjson "github.com/mailru/easyjson"
-	plugin "github.com/tabbed/sqlc-go/codegen"
-	"github.com/tabbed/sqlc-go/metadata"
-	"github.com/tabbed/sqlc-go/sdk"
+	"github.com/sqlc-dev/plugin-sdk-go/metadata"
+	"github.com/sqlc-dev/plugin-sdk-go/plugin"
+	"github.com/sqlc-dev/plugin-sdk-go/sdk"
 
 	"github.com/kaashyapan/sqlc-gen-fsharp/internal/inflection"
 )
@@ -128,7 +128,11 @@ func (v Params) Args() string {
 	fields := v.Struct.Fields
 	for _, f := range fields {
 		name := FsIdent(f.Name)
-		if f.Type.IsNull {
+		if f.Type.IsSqlcSlice {
+			// Slice parameters are always required and use seq<T>
+			innerType := strings.TrimSuffix(f.Type.Name, " option")
+			requiredArgs = append(requiredArgs, name+": "+innerType+" seq")
+		} else if f.Type.IsNull {
 			typ := strings.TrimSuffix(f.Type.String(), " option")
 			optionalArgs = append(optionalArgs, "?"+name+": "+typ)
 		} else {
@@ -193,7 +197,7 @@ func fsEnumValueName(value string) string {
 	return strings.ToUpper(id)
 }
 
-func BuildEnums(req *plugin.CodeGenRequest) []Enum {
+func BuildEnums(req *plugin.GenerateRequest) []Enum {
 	var enums []Enum
 	for _, schema := range req.Catalog.Schemas {
 		for _, enum := range schema.Enums {
@@ -224,9 +228,6 @@ func BuildEnums(req *plugin.CodeGenRequest) []Enum {
 }
 
 func dataClassName(name string, settings *plugin.Settings) string {
-	if rename := settings.Rename[name]; rename != "" {
-		return rename
-	}
 	out := ""
 	for _, p := range strings.Split(name, "_") {
 		out += sdk.Title(p)
@@ -238,7 +239,7 @@ func memberName(name string, settings *plugin.Settings) string {
 	return sdk.LowerTitle(dataClassName(name, settings))
 }
 
-func BuildDataClasses(conf Config, req *plugin.CodeGenRequest) []Struct {
+func BuildDataClasses(conf Config, req *plugin.GenerateRequest) []Struct {
 	var structs []Struct
 	for _, schema := range req.Catalog.Schemas {
 		for _, table := range schema.Tables {
@@ -274,15 +275,16 @@ func BuildDataClasses(conf Config, req *plugin.CodeGenRequest) []Struct {
 }
 
 type fsType struct {
-	Name      string
-	LibTyp    string
-	ReaderTyp string
-	DbName    string
-	IsEnum    bool
-	IsArray   bool
-	IsNull    bool
-	DataType  string
-	Engine    string
+	Name        string
+	LibTyp      string
+	ReaderTyp   string
+	DbName      string
+	IsEnum      bool
+	IsArray     bool
+	IsNull      bool
+	IsSqlcSlice bool
+	DataType    string
+	Engine      string
 }
 
 func (t fsType) String() string {
@@ -305,22 +307,23 @@ func (t fsType) IsUUID() bool {
 	return strings.ToLower(t.DataType) == "uuid"
 }
 
-func makeType(req *plugin.CodeGenRequest, col *plugin.Column) fsType {
+func makeType(req *plugin.GenerateRequest, col *plugin.Column) fsType {
 	fstyp, readerTyp, libTyp, isEnum := fsInnerType(req, col)
 	return fsType{
-		Name:      fstyp,
-		LibTyp:    libTyp,
-		ReaderTyp: readerTyp,
-		DbName:    col.Name,
-		IsEnum:    isEnum,
-		IsArray:   col.IsArray,
-		IsNull:    !col.NotNull,
-		DataType:  sdk.DataType(col.Type),
-		Engine:    req.Settings.Engine,
+		Name:        fstyp,
+		LibTyp:      libTyp,
+		ReaderTyp:   readerTyp,
+		DbName:      col.Name,
+		IsEnum:      isEnum,
+		IsArray:     col.IsArray,
+		IsNull:      !col.NotNull,
+		IsSqlcSlice: col.IsSqlcSlice,
+		DataType:    sdk.DataType(col.Type),
+		Engine:      req.Settings.Engine,
 	}
 }
 
-func fsInnerType(req *plugin.CodeGenRequest, col *plugin.Column) (string, string, string, bool) {
+func fsInnerType(req *plugin.GenerateRequest, col *plugin.Column) (string, string, string, bool) {
 	return sqliteType(req, col)
 }
 
@@ -329,7 +332,7 @@ type goColumn struct {
 	*plugin.Column
 }
 
-func fsColumnsToStruct(req *plugin.CodeGenRequest, name string, columns []goColumn, namer func(*plugin.Column, int) string) *Struct {
+func fsColumnsToStruct(req *plugin.GenerateRequest, name string, columns []goColumn, namer func(*plugin.Column, int) string) *Struct {
 	gs := Struct{
 		Name: name,
 	}
@@ -395,22 +398,46 @@ func reformatSqlParamNames(q Query) string {
 		return rawQuery
 	}
 
+	// Build a set of slice param indices (0-based field index)
+	sliceFields := map[int]bool{}
+	for i, f := range q.Arg.Struct.Fields {
+		if f.Type.IsSqlcSlice {
+			sliceFields[i] = true
+		}
+	}
+
 	if len(q.Arg.binding) > 0 {
 		for _, idx := range q.Arg.binding {
-			f := q.Arg.Struct.Fields[idx-1]
+			fieldIdx := idx - 1
+			f := q.Arg.Struct.Fields[fieldIdx]
 			token := `[\$\?]` + strconv.Itoa(idx+1) + `\b`
 			regx := regexp.MustCompile(token)
-			newToken := "@" + f.Type.DbName
-			rawQuery = regx.ReplaceAllString(rawQuery, newToken)
+			if sliceFields[fieldIdx] {
+				// For slice params, remove the positional placeholder, keep /*SLICE:name*/
+				rawQuery = regx.ReplaceAllString(rawQuery, "")
+			} else {
+				newToken := "@" + f.Type.DbName
+				rawQuery = regx.ReplaceAllString(rawQuery, newToken)
+			}
 		}
 	} else {
 		for i, f := range q.Arg.Struct.Fields {
 			token := `[\$\?]` + strconv.Itoa(i+1) + `\b`
 			regx := regexp.MustCompile(token)
-			newToken := "@" + f.Type.DbName
-			rawQuery = regx.ReplaceAllString(rawQuery, newToken)
+			if sliceFields[i] {
+				// For slice params, remove the positional placeholder, keep /*SLICE:name*/
+				rawQuery = regx.ReplaceAllString(rawQuery, "")
+			} else {
+				newToken := "@" + f.Type.DbName
+				rawQuery = regx.ReplaceAllString(rawQuery, newToken)
+			}
 		}
 	}
+
+	// Clean up any remaining positional placeholders after /*SLICE:...*/ markers.
+	// SQLite may emit bare ? without a number, so the per-field regex won't catch it.
+	sliceCleanup := regexp.MustCompile(`(/\*SLICE:\w+\*/)\?(\d*)`)
+	rawQuery = sliceCleanup.ReplaceAllString(rawQuery, "$1")
 
 	return rawQuery
 
@@ -447,31 +474,70 @@ func scalarReaderExpr(typ fsType) string {
 	return getExpr
 }
 
+// hasSliceParam returns true if any parameter is a sqlc.slice() parameter
+func (q Query) hasSliceParam() bool {
+	if q.Arg.isEmpty() {
+		return false
+	}
+	for _, f := range q.Arg.Struct.Fields {
+		if f.Type.IsSqlcSlice {
+			return true
+		}
+	}
+	return false
+}
+
 // ConnPipeline generates the ADO.NET method body for a query
 func (t TmplCtx) ConnPipeline(q Query) []string {
 	out := []string{}
 
 	out = append(out, "use cmd = conn.CreateCommand()")
-	out = append(out, "cmd.CommandText <- Sqls."+q.ConstantName)
+
+	hasSlice := q.hasSliceParam()
+
+	if hasSlice {
+		// For queries with slice parameters, we need to build the SQL at runtime
+		out = append(out, "let mutable commandText = Sqls."+q.ConstantName)
+	}
 
 	// Add parameters
 	if !q.Arg.isEmpty() {
 		for _, f := range q.Arg.Struct.Fields {
 			name := FsIdent(f.Name)
-			var valueExpr string
-			if f.Type.ReaderTyp == "GetF32Blob" {
-				if f.Type.IsNull {
-					valueExpr = fmt.Sprintf("match %s with Some v -> box (MemoryMarshal.AsBytes<float32>(ReadOnlySpan<float32>(v)).ToArray()) | None -> box DBNull.Value", name)
-				} else {
-					valueExpr = fmt.Sprintf("box (MemoryMarshal.AsBytes<float32>(ReadOnlySpan<float32>(%s)).ToArray())", name)
-				}
-			} else if f.Type.IsNull {
-				valueExpr = fmt.Sprintf("match %s with Some v -> box v | None -> box DBNull.Value", name)
+			if f.Type.IsSqlcSlice {
+				// Generate runtime slice expansion code
+				dbName := f.Type.DbName
+				out = append(out, fmt.Sprintf(
+					`let %sPlaceholders = %s |> Seq.mapi (fun i _ -> sprintf "@%s_%%d" i) |> String.concat ", "`,
+					name, name, dbName))
+				out = append(out, fmt.Sprintf(
+					`commandText <- if Seq.isEmpty %s then commandText.Replace("/*SLICE:%s*/", "NULL") else commandText.Replace("/*SLICE:%s*/", %sPlaceholders)`,
+					name, dbName, dbName, name))
+				out = append(out, fmt.Sprintf(
+					`%s |> Seq.iteri (fun i v -> cmd.Parameters.Add(cmd.CreateParameter(ParameterName = (sprintf "@%s_%%d" i), Value = box v)) |> ignore)`,
+					name, dbName))
 			} else {
-				valueExpr = fmt.Sprintf("box %s", name)
+				var valueExpr string
+				if f.Type.ReaderTyp == "GetF32Blob" {
+					if f.Type.IsNull {
+						valueExpr = fmt.Sprintf("match %s with Some v -> box (MemoryMarshal.AsBytes<float32>(ReadOnlySpan<float32>(v)).ToArray()) | None -> box DBNull.Value", name)
+					} else {
+						valueExpr = fmt.Sprintf("box (MemoryMarshal.AsBytes<float32>(ReadOnlySpan<float32>(%s)).ToArray())", name)
+					}
+				} else if f.Type.IsNull {
+					valueExpr = fmt.Sprintf("match %s with Some v -> box v | None -> box DBNull.Value", name)
+				} else {
+					valueExpr = fmt.Sprintf("box %s", name)
+				}
+				out = append(out, fmt.Sprintf(`cmd.Parameters.Add(cmd.CreateParameter(ParameterName = "@%s", Value = %s)) |> ignore`, f.Type.DbName, valueExpr))
 			}
-			out = append(out, fmt.Sprintf(`cmd.Parameters.Add(cmd.CreateParameter(ParameterName = "@%s", Value = %s)) |> ignore`, f.Type.DbName, valueExpr))
 		}
+	}
+
+	if hasSlice {
+		out = append(out, "cmd.CommandText <- commandText")
+	} else {
+		out = append(out, "cmd.CommandText <- Sqls."+q.ConstantName)
 	}
 
 	// Execute
@@ -522,7 +588,7 @@ func parseInts(s []string) ([]int, error) {
 	return refs, nil
 }
 
-func BuildQueries(req *plugin.CodeGenRequest, structs []Struct) ([]Query, error) {
+func BuildQueries(req *plugin.GenerateRequest, structs []Struct) ([]Query, error) {
 	qs := make([]Query, 0, len(req.Queries))
 	for _, query := range req.Queries {
 		if query.Name == "" {
@@ -742,7 +808,7 @@ func ExecCommand(t TmplCtx, q Query) string {
 	}
 }
 
-func MakeConfig(req *plugin.Request) (Config, error) {
+func MakeConfig(req *plugin.GenerateRequest) (Config, error) {
 
 	var conf Config
 	if len(req.PluginOptions) > 0 {

@@ -7,7 +7,7 @@ package templates
 //line models.qtpl:1
 import (
 	"github.com/kaashyapan/sqlc-gen-fsharp/internal/core"
-	"github.com/tabbed/sqlc-go/sdk"
+	"github.com/sqlc-dev/plugin-sdk-go/sdk"
 )
 
 //line models.qtpl:7

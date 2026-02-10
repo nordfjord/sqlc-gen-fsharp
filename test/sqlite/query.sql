@@ -56,3 +56,11 @@ RETURNING *;
 SELECT * FROM events
 WHERE type = @type
 ORDER BY id;
+
+-- name: MaxAuthorId :one
+SELECT CAST(max(id) AS INTEGER) as max_id from authors;
+
+-- name: GetAuthorsByIds :many
+SELECT * FROM authors
+WHERE id IN (sqlc.slice('ids'))
+ORDER BY id;

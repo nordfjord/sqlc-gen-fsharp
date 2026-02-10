@@ -6,7 +6,7 @@ import (
 
 	"github.com/kaashyapan/sqlc-gen-fsharp/internal/core"
 	"github.com/kaashyapan/sqlc-gen-fsharp/internal/templates"
-	"github.com/tabbed/sqlc-go/sdk"
+	"github.com/sqlc-dev/plugin-sdk-go/sdk"
 )
 
 func Models(w io.Writer, dot core.TmplCtx) (err error) {

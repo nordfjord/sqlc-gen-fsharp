@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/tabbed/sqlc-go/codegen"
+	"github.com/sqlc-dev/plugin-sdk-go/codegen"
 
 	fsharp "github.com/kaashyapan/sqlc-gen-fsharp/internal"
 )

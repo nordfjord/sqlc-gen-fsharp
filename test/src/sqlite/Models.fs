@@ -9,7 +9,7 @@ open System.Data
 
 type Author =
   {
-    Id: int
+    Id: int64
     Name: string
     Bio: string option
     Address: string option
@@ -22,10 +22,10 @@ type Author =
     Payable: decimal option
   }
 
-type Embedding = { Id: int; Embedding: float32[] }
+type Embedding = { Id: int64; Embedding: float32[] }
 
-type Event = { Id: int; Type: string; Val: string option }
+type Event = { Id: int64; Type: string; Val: string option }
 
-type GetAuthor2Row = { Id: int; Name: string; Bio: string option }
+type GetAuthor2Row = { Id: int64; Name: string; Bio: string option }
 
-type TotalBooksRow = { Cnt: int; TotalBooks: double option }
+type TotalBooksRow = { Cnt: int64; TotalBooks: double option }

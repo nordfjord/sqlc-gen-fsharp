@@ -44,7 +44,7 @@ let ``getAuthor returns the correct author`` () =
   use conn = createConnection ()
   let db = DB(conn)
   db.CreateAuthor("Alice", "Bio") |> ignore
-  let result = db.GetAuthor 1
+  let result = db.GetAuthor 1L
   test <@ result |> ValueOption.map (fun x -> x.Name, x.Bio) = ValueSome("Alice", Some "Bio") @>
 
 [<Fact>]
@@ -52,15 +52,15 @@ let ``getAuthor2 returns partial columns`` () =
   use conn = createConnection ()
   let db = DB(conn)
   db.CreateAuthor("Alice", "Bio") |> ignore
-  let result = db.GetAuthor2 1
-  test <@ result = ValueSome { Id = 1; Name = "Alice"; Bio = Some "Bio" } @>
+  let result = db.GetAuthor2 1L
+  test <@ result = ValueSome { Id = 1L; Name = "Alice"; Bio = Some "Bio" } @>
 
 [<Fact>]
 let ``deleteAuthor removes the author`` () =
   use conn = createConnection ()
   let db = DB(conn)
   db.CreateAuthor("Alice", "Bio") |> ignore
-  db.DeleteAuthor 1 |> ignore
+  db.DeleteAuthor 1L |> ignore
   let result = db.ListAuthors()
   test <@ result.Count = 0 @>
 
@@ -81,12 +81,12 @@ let ``countAuthors returns correct count`` () =
   use conn = createConnection ()
   let db = DB(conn)
   let empty = db.CountAuthors()
-  test <@ empty = ValueSome 0 @>
+  test <@ empty = ValueSome 0L @>
 
   db.CreateAuthor("Alice") |> ignore
   db.CreateAuthor("Bob") |> ignore
   let result = db.CountAuthors()
-  test <@ result = ValueSome 2 @>
+  test <@ result = ValueSome 2L @>
 
 [<Fact>]
 let ``totalBooks returns count and sum`` () =
@@ -96,7 +96,7 @@ let ``totalBooks returns count and sum`` () =
   db.CreateAuthor("Bob") |> ignore
 
   let result = db.TotalBooks()
-  test <@ result = ValueSome { Cnt = 2; TotalBooks = Some 3.0 } @>
+  test <@ result = ValueSome { Cnt = 2L; TotalBooks = Some 3.0 } @>
 
 [<Fact>]
 let ``dbString returns literal string`` () =
@@ -142,3 +142,35 @@ let ``getEventsByType filters by type`` () =
   let result = db.GetEventsByType("click")
   let vals = result |> Seq.map (fun e -> e.Val) |> Seq.toList
   test <@ vals = [ Some "a"; Some "c" ] @>
+
+[<Fact>]
+let ``maxAuthorId returns max id using aggregation`` () =
+  use conn = createConnection ()
+  let db = DB(conn)
+  db.CreateAuthor("Alice") |> ignore
+  db.CreateAuthor("Bob") |> ignore
+  db.CreateAuthor("Charlie") |> ignore
+
+  let result = db.MaxAuthorId()
+  test <@ result = ValueSome 3L @>
+
+[<Fact>]
+let ``getAuthorsByIds returns matching authors in order`` () =
+  use conn = createConnection ()
+  let db = DB(conn)
+  db.CreateAuthor("Alice") |> ignore
+  db.CreateAuthor("Bob") |> ignore
+  db.CreateAuthor("Charlie") |> ignore
+
+  let result = db.GetAuthorsByIds([ 1L; 3L ])
+  let names = result |> Seq.map (fun a -> a.Name) |> Seq.toList
+  test <@ names = [ "Alice"; "Charlie" ] @>
+
+[<Fact>]
+let ``getAuthorsByIds with empty list returns empty`` () =
+  use conn = createConnection ()
+  let db = DB(conn)
+  db.CreateAuthor("Alice") |> ignore
+
+  let result = db.GetAuthorsByIds(Seq.empty<int64>)
+  test <@ result.Count = 0 @>

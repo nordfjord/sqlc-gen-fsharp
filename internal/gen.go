@@ -7,13 +7,13 @@ import (
 	"io"
 	"strings"
 
-	plugin "github.com/tabbed/sqlc-go/codegen"
+	"github.com/sqlc-dev/plugin-sdk-go/plugin"
 
 	"github.com/kaashyapan/sqlc-gen-fsharp/internal/core"
 	"github.com/kaashyapan/sqlc-gen-fsharp/internal/tmpl"
 )
 
-func Generate(ctx context.Context, req *plugin.Request) (*plugin.Response, error) {
+func Generate(ctx context.Context, req *plugin.GenerateRequest) (*plugin.GenerateResponse, error) {
 	conf, err := core.MakeConfig(req)
 
 	enums := core.BuildEnums(req)
@@ -71,7 +71,7 @@ func Generate(ctx context.Context, req *plugin.Request) (*plugin.Response, error
 		return nil, err
 	}
 
-	resp := plugin.CodeGenResponse{}
+	resp := plugin.GenerateResponse{}
 
 	for filename, code := range output {
 		resp.Files = append(resp.Files, &plugin.File{
