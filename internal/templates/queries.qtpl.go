@@ -39,13 +39,6 @@ func StreamQueries(qw422016 *qt422016.Writer, ctx core.TmplCtx) {
 `)
 //line queries.qtpl:11
 	}
-//line queries.qtpl:12
-	if ctx.Settings.Engine == "postgresql" {
-//line queries.qtpl:12
-		qw422016.N().S(`// for nuget package Npgsql.FSharp --version 5.7.0
-`)
-//line queries.qtpl:14
-	}
 //line queries.qtpl:14
 	qw422016.N().S(`
 

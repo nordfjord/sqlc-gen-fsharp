@@ -47,17 +47,7 @@ func (i *Importer) readersImports(pkgName string) []string {
 	std := stdImports(uses)
 	stds := make([]string, 0, len(std))
 	stds = append(stds, std...)
-
-	switch i.Settings.Engine {
-	case "postgresql":
-		stds = append(stds, "Npgsql")
-		stds = append(stds, "Npgsql.FSharp")
-
-	case "sqlite":
-		stds = append(stds, "Fumble")
-	default:
-
-	}
+	stds = append(stds, "Fumble")
 
 	return stds
 }
@@ -89,16 +79,7 @@ func (i *Importer) modelImports() []string {
 	}
 
 	std := stdImports(uses)
-
-	switch i.Settings.Engine {
-	case "postgresql":
-		std = append(std, "Npgsql")
-
-	case "sqlite":
-		std = append(std, "Fumble")
-	default:
-
-	}
+	std = append(std, "Fumble")
 
 	return std
 }
@@ -139,26 +120,10 @@ func (i *Importer) queryImports(pkgName string) []string {
 
 	stds := make([]string, 0, len(std))
 	stds = append(stds, std...)
+	stds = append(stds, "Fumble")
 
-	switch i.Settings.Engine {
-	case "postgresql":
-		stds = append(stds, "Npgsql")
-		stds = append(stds, "Npgsql.FSharp")
-
-	case "sqlite":
-		stds = append(stds, "Fumble")
-	default:
-
-	}
-
-	switch i.Settings.Engine {
-	case "mysql":
-		return stds
-
-	default:
-		packageImports := []string{fmt.Sprintf("%s.Readers", pkgName)}
-		stds = append(stds, packageImports...)
-	}
+	packageImports := []string{fmt.Sprintf("%s.Readers", pkgName)}
+	stds = append(stds, packageImports...)
 
 	return stds
 }

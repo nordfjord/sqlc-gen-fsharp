@@ -1,15 +1,10 @@
 To test
 
 ```bash
-cd postgres 
-sqlc generate
-cd ../sqlite 
-sqlc generate
-cd ../mysql 
+cd sqlite 
 sqlc generate
 cd ../
 fantomas .
-docker-compose up -d
 dotnet run
 ```
 

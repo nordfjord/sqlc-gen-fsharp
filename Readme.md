@@ -14,11 +14,9 @@ Sqlc documentation - https://sqlc.dev
   - Readers to decode DB response into F# data structures 
 
 
-| Target    |  Library          |    |
-|-----------|-------------------|----|
-|Postgres   |`Npgsql.FSharp`    |   |
-|MySql      | Not supported     | Models will be generated|
-|Sqlite     |`Fumble`           |   |
+| Target    |  Library          |
+|-----------|-------------------|
+|Sqlite     |`Fumble`           |
 
 ## Why this ?
 Type safe DB access in F# is tedious with manually written data structures.\
@@ -33,10 +31,10 @@ Running the 2 plugins in sequence should generate much of the boilerplate
 |SqlHydra  | Sqlc|
 |-----------|-------------------|
 |Uses a connection to the database to generate data structures| Uses schema file and SQL files|
-|Postgres, Oracle, MS-Sql & Sqlite | Postgres & Sqlite |
+|Postgres, Oracle, MS-Sql & Sqlite | Sqlite |
 |SqlHydra.Query uses Sqlkata and also has some Linq-to-Sql goodness | Basic CRUD using [sqlc-gen-crud](https://github.com/kaashyapan/sqlc-gen-crud). Handwritten Sql for anything more. |
 |Wraps Microsoft.Data.SqlClient. Flexible. Bring your own ADO.net wrapper| Wraps higher level F# libraries. Opinionated. Less generated code. |
-|Cannot introspect queries | Wraps the pg_query Postgres SQL parser. It syntax checks the SQL & DDL statements catching misspelt column names etc..|
+|Cannot introspect queries | Syntax checks the SQL & DDL statements catching misspelt column names etc..|
 |Handwritten data structures are required for custom queries| Produces exact data structures and readers for custom queries |
 
 And there is also [Facil](https://github.com/cmeeren/Facil) but its MS-Sql only. Havent played around with it much.
@@ -44,7 +42,7 @@ And there is also [Facil](https://github.com/cmeeren/Facil) but its MS-Sql only.
 ## How to use
 
 - Install [Sqlc](https://docs.sqlc.dev/en/latest/overview/install.html)
-- Create Schema.sql containing DDL statements. (or generate using pg_dump)
+- Create Schema.sql containing DDL statements.
 - Create Query.sql containing SQL statements with an annotation like in [docs](https://docs.sqlc.dev/en/latest/reference/query-annotations.html)
     ```sql
     -- name: ListAuthors :many
@@ -65,7 +63,7 @@ And there is also [Facil](https://github.com/cmeeren/Facil) but its MS-Sql only.
     ],
     "sql": [
       {
-        "engine": "postgresql",
+        "engine": "sqlite",
         "schema": "schema.sql",
         "queries": "query.sql",
         "codegen": [
@@ -74,8 +72,7 @@ And there is also [Facil](https://github.com/cmeeren/Facil) but its MS-Sql only.
             "plugin": "fsharp",
             "options": {
               "namespace": <...Namespace...>,
-              "async": false,
-              "type_affinity": true 
+              "async": false
             }
           }
         ]
@@ -93,11 +90,9 @@ See the example folder for a sample setup.
 `namespace`: The namespace to use for the generated code.\
 `out`: Output directory for generated code.\
 `emit_exact_table_names`: If true, use the exact table name for generated models. Otherwise, guess a singular form. Defaults to *false*.\
-`async`: If true, all query functions generated will be async. Defaults to *false*.\
-`type_affinity`: If true, all DB integers (except Bigint) will be mapped to F#int. All DB floats will be mapped to F#double. Defaults to *false*.
+`async`: If true, all query functions generated will be async. Defaults to *false*.
 
 
 ### TODO
 - Support for enumerated column types.
-- Postgis type support
 - Optionally generate classes instead of records

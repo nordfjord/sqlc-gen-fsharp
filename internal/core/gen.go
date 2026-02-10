@@ -160,9 +160,6 @@ func fsEnumValueName(value string) string {
 func BuildEnums(req *plugin.CodeGenRequest) []Enum {
 	var enums []Enum
 	for _, schema := range req.Catalog.Schemas {
-		if schema.Name == "pg_catalog" || schema.Name == "information_schema" {
-			continue
-		}
 		for _, enum := range schema.Enums {
 			var enumName string
 			if schema.Name == req.Catalog.DefaultSchema {
@@ -208,9 +205,6 @@ func memberName(name string, settings *plugin.Settings) string {
 func BuildDataClasses(conf Config, req *plugin.CodeGenRequest) []Struct {
 	var structs []Struct
 	for _, schema := range req.Catalog.Schemas {
-		if schema.Name == "pg_catalog" || schema.Name == "information_schema" {
-			continue
-		}
 		for _, table := range schema.Tables {
 			var tableName string
 			if schema.Name == req.Catalog.DefaultSchema {
@@ -291,17 +285,7 @@ func makeType(req *plugin.CodeGenRequest, col *plugin.Column) fsType {
 }
 
 func fsInnerType(req *plugin.CodeGenRequest, col *plugin.Column) (string, string, string, bool) {
-	// TODO: Extend the engine interface to handle types
-	switch req.Settings.Engine {
-	case "mysql":
-		return mysqlType(req, col)
-	case "postgresql":
-		return postgresType(req, col)
-	case "sqlite":
-		return sqliteType(req, col)
-	default:
-		return "any", "any", "any", false
-	}
+	return sqliteType(req, col)
 }
 
 type goColumn struct {
@@ -398,15 +382,7 @@ func reformatSqlParamNames(q Query) string {
 
 // provide initial connection string
 func (t TmplCtx) ConnString() []string {
-	if t.Settings.Engine == "postgresql" {
-		out := []string{"// https://www.connectionstrings.com/npgsql"}
-		return out
-	}
-	if t.Settings.Engine == "sqlite" {
-		out := []string{"// https://www.connectionstrings.com/sqlite-net-provider"}
-		return out
-	}
-	return nil
+	return []string{"// https://www.connectionstrings.com/sqlite-net-provider"}
 }
 
 // provide initial connection string
@@ -633,46 +609,20 @@ func ExecCommand(t TmplCtx, q Query) string {
 	}
 
 	if t.Configuration.Async {
-		switch t.Settings.Engine {
-		case "postgresql":
-			switch q.Cmd {
-			case ":one":
-				return "executeRowAsync" + " " + reader
-			case ":many":
-				return "executeAsync" + " " + reader
-			default:
-				return "executeNonQueryAsync"
-			}
-		case "sqlite":
-			switch q.Cmd {
-			case ":one", ":many":
-				return "executeAsync" + " " + reader
-			default:
-				return "executeNonQueryAsync"
-			}
+		switch q.Cmd {
+		case ":one", ":many":
+			return "executeAsync" + " " + reader
+		default:
+			return "executeNonQueryAsync"
 		}
 	} else {
-		switch t.Settings.Engine {
-		case "postgresql":
-			switch q.Cmd {
-			case ":one":
-				return "executeRow" + " " + reader
-			case ":many":
-				return "execute" + " " + reader
-			default:
-				return "executeNonQuery"
-			}
-		case "sqlite":
-			switch q.Cmd {
-			case ":one", ":many":
-				return "execute" + " " + reader
-			default:
-				return "executeNonQuery"
-			}
-
+		switch q.Cmd {
+		case ":one", ":many":
+			return "execute" + " " + reader
+		default:
+			return "executeNonQuery"
 		}
 	}
-	return ""
 }
 
 func MakeConfig(req *plugin.Request) (Config, error) {

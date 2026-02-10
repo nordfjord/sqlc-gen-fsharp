@@ -44,8 +44,6 @@ func easyjson6615c02eDecodeGithubComKaashyapanSqlcGenFsharpInternalCore(in *jlex
 			out.Async = bool(in.Bool())
 		case "emit_classes":
 			out.EmitClasses = bool(in.Bool())
-		case "type_affinity":
-			out.TypeAffinity = bool(in.Bool())
 		case "inflection_exclude_table_names":
 			if in.IsNull() {
 				in.Skip()
@@ -102,11 +100,6 @@ func easyjson6615c02eEncodeGithubComKaashyapanSqlcGenFsharpInternalCore(out *jwr
 		const prefix string = ",\"emit_classes\":"
 		out.RawString(prefix)
 		out.Bool(bool(in.EmitClasses))
-	}
-	{
-		const prefix string = ",\"type_affinity\":"
-		out.RawString(prefix)
-		out.Bool(bool(in.TypeAffinity))
 	}
 	{
 		const prefix string = ",\"inflection_exclude_table_names\":"

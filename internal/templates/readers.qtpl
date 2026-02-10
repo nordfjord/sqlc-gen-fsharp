@@ -9,9 +9,7 @@
 {%- if ctx.Settings.Engine == "sqlite" -%}
 // for nuget package Fumble --version 1.0.1
 {%- endif -%}
-{%- if ctx.Settings.Engine == "postgresql" -%}
-// for nuget package Npgsql.FSharp --version 5.7.0
-{%- endif -%}
+
 
 namespace {%s ctx.Package %}
 

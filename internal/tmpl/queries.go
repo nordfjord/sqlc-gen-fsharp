@@ -18,10 +18,6 @@ func SQL(w io.Writer, dot core.TmplCtx) (err error) {
 		}
 	}()
 
-	if dot.Settings.Engine == "mysql" {
-		return nil
-	}
-
 	templates.WriteQueries(w, dot)
 	//return fsSQLTmpl(w, dot)
 	return nil
@@ -53,10 +49,6 @@ func fsSQLTmpl(w io.Writer, dot core.TmplCtx) error {
 				_, _ = io.WriteString(w, "\n)\n\n")
 			}
 		}
-	}
-
-	if dot.Settings.Engine == "mysql" {
-		return nil
 	}
 
 	if eval := dot.Queries; len(eval) != 0 {

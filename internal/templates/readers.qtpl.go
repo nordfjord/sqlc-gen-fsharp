@@ -39,13 +39,6 @@ func StreamReaders(qw422016 *qt422016.Writer, ctx core.TmplCtx) {
 `)
 //line readers.qtpl:11
 	}
-//line readers.qtpl:12
-	if ctx.Settings.Engine == "postgresql" {
-//line readers.qtpl:12
-		qw422016.N().S(`// for nuget package Npgsql.FSharp --version 5.7.0
-`)
-//line readers.qtpl:14
-	}
 //line readers.qtpl:14
 	qw422016.N().S(`
 namespace `)
