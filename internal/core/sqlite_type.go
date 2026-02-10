@@ -8,6 +8,8 @@ import (
 )
 
 // https://learn.microsoft.com/en-us/dotnet/standard/data/sqlite/types
+// ReaderTyp now stores ADO.NET IDataReader getter method names (e.g. GetInt32, GetString)
+// Nullability is handled separately via IsNull + IsDBNull checks in the reader/pipeline generation
 func sqliteType(req *plugin.CodeGenRequest, col *plugin.Column) (string, string, string, bool) {
 
 	columnType := strings.ToLower(sdk.DataType(col.Type))
@@ -17,40 +19,40 @@ func sqliteType(req *plugin.CodeGenRequest, col *plugin.Column) (string, string,
 
 	case "int", "integer", "tinyint", "smallint", "mediumint", "bigint", "unsignedbigint", "int2", "int8":
 		if notNull {
-			return "int", "int", "int", false
+			return "int", "GetInt32", "int", false
 		} else {
-			return "int option", "intOrNone", "intOrNone", false
+			return "int option", "GetInt32", "intOrNone", false
 		}
 	case "blob":
 		if notNull {
-			return "byte[]", "bytes", "bytes", false
+			return "byte[]", "GetBytes", "bytes", false
 		} else {
-			return "byte[] option", "bytesOrNone", "bytesOrNone", false
+			return "byte[] option", "GetBytes", "bytesOrNone", false
 		}
 	case "real", "double", "doubleprecision", "float":
 		if notNull {
-			return "double", "double", "double", false
+			return "double", "GetDouble", "double", false
 		} else {
-			return "double option", "doubleOrNone", "doubleOrNone", false
+			return "double option", "GetDouble", "doubleOrNone", false
 		}
 	case "boolean", "bool":
 		if col.NotNull {
-			return "bool", "bool", "bool", false
+			return "bool", "GetBoolean", "bool", false
 		} else {
-			return "bool option", "boolOrNone", "boolOrNone", false
+			return "bool option", "GetBoolean", "boolOrNone", false
 		}
 
 	case "date", "datetime":
 		if notNull {
-			return "DateTime", "dateTime", "dateTime", false
+			return "DateTime", "GetDateTime", "dateTime", false
 		} else {
-			return "DateTime option", "dateTimeOrNone", "dateTimeOrNone", false
+			return "DateTime option", "GetDateTime", "dateTimeOrNone", false
 		}
 	case "timestamp":
 		if notNull {
-			return "DateTimeOffset", "dateTimeOffset", "dateTimeOffset", false
+			return "DateTimeOffset", "GetDateTimeOffset", "dateTimeOffset", false
 		} else {
-			return "DateTimeOffset option", "dateTimeOffsetOrNone", "dateTimeOffsetOrNone", false
+			return "DateTimeOffset option", "GetDateTimeOffset", "dateTimeOffsetOrNone", false
 		}
 
 	}
@@ -66,16 +68,16 @@ func sqliteType(req *plugin.CodeGenRequest, col *plugin.Column) (string, string,
 		columnType == "text",
 		columnType == "clob":
 		if notNull {
-			return "string", "string", "string", false
+			return "string", "GetString", "string", false
 		} else {
-			return "string option", "stringOrNone", "stringOrNone", false
+			return "string option", "GetString", "stringOrNone", false
 		}
 
 	case strings.HasPrefix(columnType, "decimal"), columnType == "numeric":
 		if notNull {
-			return "decimal", "decimal", "decimal", false
+			return "decimal", "GetDecimal", "decimal", false
 		} else {
-			return "decimal option", "decimalOrNone", "decimalOrNone", false
+			return "decimal option", "GetDecimal", "decimalOrNone", false
 		}
 
 	default:

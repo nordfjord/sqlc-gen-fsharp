@@ -47,7 +47,7 @@ func (i *Importer) readersImports(pkgName string) []string {
 	std := stdImports(uses)
 	stds := make([]string, 0, len(std))
 	stds = append(stds, std...)
-	stds = append(stds, "Fumble")
+	stds = append(stds, "System.Data")
 
 	return stds
 }
@@ -79,7 +79,7 @@ func (i *Importer) modelImports() []string {
 	}
 
 	std := stdImports(uses)
-	std = append(std, "Fumble")
+	std = append(std, "System.Data")
 
 	return std
 }
@@ -120,7 +120,7 @@ func (i *Importer) queryImports(pkgName string) []string {
 
 	stds := make([]string, 0, len(std))
 	stds = append(stds, std...)
-	stds = append(stds, "Fumble")
+	stds = append(stds, "System.Data")
 
 	packageImports := []string{fmt.Sprintf("%s.Readers", pkgName)}
 	stds = append(stds, packageImports...)

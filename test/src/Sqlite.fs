@@ -1,46 +1,105 @@
-module Sqlite
+module SqliteTests
 
-open System
-open Fumble
+open Xunit
+open Swensen.Unquote
+open Microsoft.Data.Sqlite
 open FSharp.Data.LiteralProviders
 open SAuthors
-open System.IO
 
 [<Literal>]
 let initsql = TextFile<"sqlite/schema.sql">.Text
 
-[<Literal>]
-let conn = "Data Source=/tmp/sample.db;"
+let createConnection () =
+  let conn = new SqliteConnection "Data Source=:memory:"
+  conn.Open()
+  use cmd = conn.CreateCommand()
+  cmd.CommandText <- initsql
+  cmd.ExecuteNonQuery() |> ignore
+  conn
 
-let initiate () = conn |> Sql.connect |> Sql.query initsql |> Sql.executeNonQuery |> printfn "%A"
+[<Fact>]
+let ``listAuthors returns empty list on fresh db`` () =
+  use conn = createConnection ()
+  let db = DB(conn)
+  let result = db.listAuthors ()
+  test <@ result = [] @>
 
-let run () =
-  let db = SAuthors.DB(conn)
+[<Fact>]
+let ``createAuthor inserts and returns the author`` () =
+  use conn = createConnection ()
+  let db = DB(conn)
+  let result = db.createAuthor ("Alice", "Author bio")
+  test <@ result |> ValueOption.map (fun x -> x.Name, x.Bio) = ValueSome("Alice", Some "Author bio") @>
 
-  printfn "\n----------------------------------------------------------------- \n"
-  printfn "Initiating Sqlite DB"
+[<Fact>]
+let ``createAuthor with None bio`` () =
+  use conn = createConnection ()
+  let db = DB(conn)
+  let result = db.createAuthor ("Bob")
+  test <@ result |> ValueOption.map (fun x -> x.Name, x.Bio) = ValueSome("Bob", None) @>
 
-  ignore <| initiate ()
+[<Fact>]
+let ``getAuthor returns the correct author`` () =
+  use conn = createConnection ()
+  let db = DB(conn)
+  db.createAuthor ("Alice", "Bio") |> ignore
+  let result = db.getAuthor 1
+  test <@ result |> ValueOption.map (fun x -> x.Name, x.Bio) = ValueSome("Alice", Some "Bio") @>
 
-  db.listAuthors () |> printfn "List authors - %A"
+[<Fact>]
+let ``getAuthor2 returns partial columns`` () =
+  use conn = createConnection ()
+  let db = DB(conn)
+  db.createAuthor ("Alice", "Bio") |> ignore
+  let result = db.getAuthor2 1
+  test <@ result = ValueSome { Id = 1; Name = "Alice"; Bio = Some "Bio" } @>
 
-  db.createAuthor ("Elon Musk", "CEO, CTO") |> printfn "Create authors - %A"
+[<Fact>]
+let ``deleteAuthor removes the author`` () =
+  use conn = createConnection ()
+  let db = DB(conn)
+  db.createAuthor ("Alice", "Bio") |> ignore
+  db.deleteAuthor 1 |> ignore
+  let result = db.listAuthors ()
+  test <@ result = [] @>
 
-  db.createAuthor ("Jeff Bezos", "Chairman Amazon")
-  |> function
-    | Ok rows ->
-      let r = List.head rows
-      db.deleteAuthor (r.Id) |> printfn "Delete authors - %A"
+[<Fact>]
+let ``listAuthors returns all authors in name order`` () =
+  use conn = createConnection ()
+  let db = DB(conn)
+  db.createAuthor ("Charlie") |> ignore
+  db.createAuthor ("Alice") |> ignore
+  db.createAuthor ("Bob") |> ignore
 
-    | Error e -> raise e
+  let result = db.listAuthors ()
+  let names = result |> List.map (fun a -> a.Name)
+  test <@ names = [ "Alice"; "Bob"; "Charlie" ] @>
 
-  db.listAuthors () |> printfn "List authors - %A"
-  db.countAuthors () |> printfn "Count authors - %A"
-  db.totalBooks () |> printfn "Total books - %A"
-  db.dbString () |> printfn "Simple string - %A"
+[<Fact>]
+let ``countAuthors returns correct count`` () =
+  use conn = createConnection ()
+  let db = DB(conn)
+  let empty = db.countAuthors ()
+  test <@ empty = ValueSome 0 @>
 
-  db.getAuthor (1) |> printfn "Get authors - %A"
-  db.countAuthors () |> printfn "Count authors - %A"
+  db.createAuthor ("Alice") |> ignore
+  db.createAuthor ("Bob") |> ignore
+  let result = db.countAuthors ()
+  test <@ result = ValueSome 2 @>
 
-  File.Delete("/tmp/sample.db")
-  ()
+[<Fact>]
+let ``totalBooks returns count and sum`` () =
+  use conn = createConnection ()
+  let db = DB(conn)
+  db.createAuthor ("Alice") |> ignore
+  db.createAuthor ("Bob") |> ignore
+
+  let result = db.totalBooks ()
+  test <@ result = ValueSome { Cnt = 2; TotalBooks = Some 3.0 } @>
+
+[<Fact>]
+let ``dbString returns literal string`` () =
+  use conn = createConnection ()
+  let db = DB(conn)
+  let result = db.dbString ()
+  test <@ result = ValueSome "Hello world" @>

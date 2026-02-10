@@ -362,14 +362,14 @@ func reformatSqlParamNames(q Query) string {
 	if len(q.Arg.binding) > 0 {
 		for _, idx := range q.Arg.binding {
 			f := q.Arg.Struct.Fields[idx-1]
-			token := `\$` + strconv.Itoa(idx+1) + `\b`
+			token := `[\$\?]` + strconv.Itoa(idx+1) + `\b`
 			regx := regexp.MustCompile(token)
 			newToken := "@" + f.Type.DbName
 			rawQuery = regx.ReplaceAllString(rawQuery, newToken)
 		}
 	} else {
 		for i, f := range q.Arg.Struct.Fields {
-			token := `\$` + strconv.Itoa(i+1) + `\b`
+			token := `[\$\?]` + strconv.Itoa(i+1) + `\b`
 			regx := regexp.MustCompile(token)
 			newToken := "@" + f.Type.DbName
 			rawQuery = regx.ReplaceAllString(rawQuery, newToken)
@@ -382,28 +382,82 @@ func reformatSqlParamNames(q Query) string {
 
 // provide initial connection string
 func (t TmplCtx) ConnString() []string {
-	return []string{"// https://www.connectionstrings.com/sqlite-net-provider"}
+	return []string{}
 }
 
-// provide initial connection string
+// readerGetExpr generates the ADO.NET read expression for a given ReaderTyp and ordinal expression.
+// Special-cases DateTimeOffset and byte[] since IDataReader doesn't have direct getters for those.
+func readerGetExpr(readerTyp string, varName string, ordExpr string) string {
+	switch readerTyp {
+	case "GetDateTimeOffset":
+		return fmt.Sprintf("DateTimeOffset(%s.GetDateTime(%s))", varName, ordExpr)
+	case "GetBytes":
+		return fmt.Sprintf("%s.GetValue(%s) :?> byte[]", varName, ordExpr)
+	default:
+		return fmt.Sprintf("%s.%s(%s)", varName, readerTyp, ordExpr)
+	}
+}
+
+// scalarReaderExpr generates an inline scalar reader expression for use in ConnPipeline.
+// For example: rdr.GetInt32(rdr.GetOrdinal("cnt"))
+func scalarReaderExpr(typ fsType) string {
+	ordExpr := fmt.Sprintf(`rdr.GetOrdinal("%s")`, typ.DbName)
+	getExpr := readerGetExpr(typ.ReaderTyp, "rdr", ordExpr)
+	if typ.IsNull {
+		return fmt.Sprintf("if rdr.IsDBNull(%s) then None else Some(%s)", ordExpr, getExpr)
+	}
+	return getExpr
+}
+
+// ConnPipeline generates the ADO.NET method body for a query
 func (t TmplCtx) ConnPipeline(q Query) []string {
 	out := []string{}
-	argCnt := len(q.Arg.Bindings(t.Settings.Engine))
 
-	if argCnt > 0 {
-		paramstr := fmt.Sprintf("let parameters = [ %s ]", strings.Join(q.Arg.Bindings(t.Settings.Engine), "; "))
-		out = append(out, paramstr)
-		out = append(out, "")
+	out = append(out, "use cmd = conn.CreateCommand()")
+	out = append(out, "cmd.CommandText <- Sqls."+q.ConstantName)
+
+	// Add parameters
+	if !q.Arg.isEmpty() {
+		for _, f := range q.Arg.Struct.Fields {
+			var valueExpr string
+			if f.Type.IsNull {
+				valueExpr = fmt.Sprintf("match %s with Some v -> box v | None -> box DBNull.Value", f.Name)
+			} else {
+				valueExpr = fmt.Sprintf("box %s", f.Name)
+			}
+			out = append(out, fmt.Sprintf(`cmd.Parameters.Add(cmd.CreateParameter(ParameterName = "@%s", Value = %s)) |> ignore`, f.Type.DbName, valueExpr))
+		}
 	}
 
-	out = append(out, "conn")
-	out = append(out, "|> Sql.connect")
-	out = append(out, "|> Sql.query Sqls."+q.ConstantName)
-
-	if argCnt > 0 {
-		out = append(out, "|> Sql.parameters parameters")
+	// Execute
+	switch q.Cmd {
+	case ":one":
+		out = append(out, "use rdr = cmd.ExecuteReader()")
+		out = append(out, "if rdr.Read() then")
+		if q.Ret.IsStruct() {
+			reader := sdk.LowerTitle(q.Ret.Type()) + "Reader"
+			out = append(out, "  ValueSome ("+reader+" rdr)")
+		} else {
+			expr := scalarReaderExpr(q.Ret.Typ)
+			out = append(out, "  ValueSome ("+expr+")")
+		}
+		out = append(out, "else")
+		out = append(out, "  ValueNone")
+	case ":many":
+		out = append(out, "use rdr = cmd.ExecuteReader()")
+		out = append(out, "let mutable results = []")
+		out = append(out, "while rdr.Read() do")
+		if q.Ret.IsStruct() {
+			reader := sdk.LowerTitle(q.Ret.Type()) + "Reader"
+			out = append(out, "  results <- ("+reader+" rdr) :: results")
+		} else {
+			expr := scalarReaderExpr(q.Ret.Typ)
+			out = append(out, "  results <- ("+expr+") :: results")
+		}
+		out = append(out, "List.rev results")
+	default:
+		out = append(out, "cmd.ExecuteNonQuery()")
 	}
-	out = append(out, "|> Sql."+ExecCommand(t, q))
 
 	return out
 }
@@ -541,18 +595,36 @@ type TmplCtx struct {
 
 func makeReaderString(lookup map[string]Query, t TmplCtx) []string {
 	var readers []string
-	var fields []string
 
 	for _, v := range lookup {
-		fields = []string{}
-		//cnt := len(v.Ret.Struct.Fields)
-		for _, item := range v.Ret.Struct.Fields {
-			field := fmt.Sprintf(`%s = r.%s "%s"`, sdk.Title(item.Name), item.Type.ReaderTyp, item.Type.DbName)
-			fields = append(fields, field)
+		var lines []string
+		// Function signature
+		lines = append(lines, fmt.Sprintf("let %sReader (r: IDataReader) : %s =", sdk.LowerTitle(v.Ret.Type()), v.Ret.Type()))
+
+		// Build field expressions, one per line
+		for i, item := range v.Ret.Struct.Fields {
+			ordExpr := fmt.Sprintf(`r.GetOrdinal("%s")`, item.Type.DbName)
+			getExpr := readerGetExpr(item.Type.ReaderTyp, "r", ordExpr)
+
+			var fieldExpr string
+			if item.Type.IsNull {
+				fieldExpr = fmt.Sprintf("if r.IsDBNull(%s) then None else Some(%s)", ordExpr, getExpr)
+			} else {
+				fieldExpr = getExpr
+			}
+
+			if i == 0 {
+				// First field: open record brace with type qualifier
+				lines = append(lines, fmt.Sprintf("        { %s.%s = %s", v.Ret.Type(), sdk.Title(item.Name), fieldExpr))
+			} else {
+				// Subsequent fields: aligned after "{ "
+				lines = append(lines, fmt.Sprintf("          %s = %s", sdk.Title(item.Name), fieldExpr))
+			}
 		}
-		recstr := strings.Join(fields, " ; ")
-		str := fmt.Sprintf(`let %sReader (r: RowReader) : %s = { %s.%s }`, sdk.LowerTitle(v.Ret.Type()), v.Ret.Type(), v.Ret.Type(), recstr)
-		readers = append(readers, str)
+		// Close the record on the last field line
+		lines[len(lines)-1] += " }"
+
+		readers = append(readers, strings.Join(lines, "\n"))
 	}
 	return readers
 

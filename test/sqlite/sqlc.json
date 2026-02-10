@@ -3,8 +3,8 @@
   "plugins": [
     {
       "name": "fsharp",
-      "process": {
-        "cmd": "/home/ubuntu/bin/sqlc-gen-fsharp"
+      "wasm": {
+        "url": "file://../../sqlc-gen-fsharp.wasm"
       }
     }
   ],
