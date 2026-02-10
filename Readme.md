@@ -1,98 +1,125 @@
-# Sqlc plugin for F# 
-## Codegen F# from SQL
-`sqlc` is a command line program that generates type-safe database access code from SQL.\
-Sqlc documentation - https://sqlc.dev
+# sqlc-gen-fsharp
+
+A [sqlc](https://sqlc.dev) WASM plugin that generates type-safe F# code from SQL.
+
+> This is a fork of [kaashyapan/sqlc-gen-fsharp](https://github.com/kaashyapan/sqlc-gen-fsharp).
+> The original project generated code targeting the [Fumble](https://github.com/AngelMunoz/Fumble) library.
+> This fork generates plain ADO.NET code using `System.Data.IDbConnection` and `System.Data.IDataReader`,
+> so the generated code works with any ADO.NET provider (e.g. `Microsoft.Data.Sqlite`).
+
+## What it does
 
 **Inputs**
-  - DB schema.sql file
-  - File containing SQL statements
-  - Configuration file. 
+- A database schema file (DDL)
+- A file of SQL queries with [sqlc annotations](https://docs.sqlc.dev/en/latest/reference/query-annotations.html)
+- A sqlc configuration file
 
 **Outputs**
-  - Models as F# data structures
-  - Queries as functions taking named-typed parameters
-  - Readers to decode DB response into F# data structures 
+- `Models.fs` -- F# record types for tables and query result rows
+- `Readers.fs` -- Functions that decode an `IDataReader` into F# records
+- `Queries.fs` -- A `DB` class with typed methods for each query
 
-
-| Target    |  Library          |
-|-----------|-------------------|
-|Sqlite     |`Fumble`           |
-
-## Why this ?
-Type safe DB access in F# is tedious with manually written data structures.\
-[SqlHydra](https://github.com/JordanMarr/SqlHydra) is a great dotnet tool to generate F# boiler plate. Works great with ORMs.\
-I found I was writing a lot of custom SQL and wanted a solution that can generate 90% of the code.
-  
-This is intended for devs who prefer to write SQL by hand. 
-You can also auto generate basic crud SQLs for all your tables using [sqlc-gen-crud](https://github.com/kaashyapan/sqlc-gen-crud) 
-
-Running the 2 plugins in sequence should generate much of the boilerplate
-
-|SqlHydra  | Sqlc|
-|-----------|-------------------|
-|Uses a connection to the database to generate data structures| Uses schema file and SQL files|
-|Postgres, Oracle, MS-Sql & Sqlite | Sqlite |
-|SqlHydra.Query uses Sqlkata and also has some Linq-to-Sql goodness | Basic CRUD using [sqlc-gen-crud](https://github.com/kaashyapan/sqlc-gen-crud). Handwritten Sql for anything more. |
-|Wraps Microsoft.Data.SqlClient. Flexible. Bring your own ADO.net wrapper| Wraps higher level F# libraries. Opinionated. Less generated code. |
-|Cannot introspect queries | Syntax checks the SQL & DDL statements catching misspelt column names etc..|
-|Handwritten data structures are required for custom queries| Produces exact data structures and readers for custom queries |
-
-And there is also [Facil](https://github.com/cmeeren/Facil) but its MS-Sql only. Havent played around with it much.
+Only **SQLite** is supported as the database engine.
 
 ## How to use
 
-- Install [Sqlc](https://docs.sqlc.dev/en/latest/overview/install.html)
-- Create Schema.sql containing DDL statements.
-- Create Query.sql containing SQL statements with an annotation like in [docs](https://docs.sqlc.dev/en/latest/reference/query-annotations.html)
+1. Install [sqlc](https://docs.sqlc.dev/en/latest/overview/install.html)
+2. Create a `schema.sql` with your DDL statements
+3. Create a `query.sql` with annotated queries:
     ```sql
     -- name: ListAuthors :many
     SELECT * FROM authors ORDER BY name;
     ```
-- Create sqlc.json & configure the options
-  ```json
-  {
-    "version": "2",
-    "plugins": [
-      {
-        "name": "fsharp",
-        "wasm": {
-          "url": "https://github.com/kaashyapan/sqlc-gen-fsharp/releases/download/v1.0.1/sqlc-gen-fsharp.wasm",
-          "sha256": "fe0428d7cf1635b640d288be1ecfcc246ea15f882b397317394ee0d3108bdc81"
-        }
-      }
-    ],
-    "sql": [
-      {
-        "engine": "sqlite",
-        "schema": "schema.sql",
-        "queries": "query.sql",
-        "codegen": [
-          {
-            "out": <..target_folder...>,
-            "plugin": "fsharp",
-            "options": {
-              "namespace": <...Namespace...>,
-              "async": false
-            }
+4. Create `sqlc.json`:
+    ```json
+    {
+      "version": "2",
+      "plugins": [
+        {
+          "name": "fsharp",
+          "wasm": {
+            "url": "https://github.com/nordfjord/sqlc-gen-fsharp/releases/download/v1.0.1/sqlc-gen-fsharp.wasm",
+            "sha256": "<sha256 of the wasm file>"
           }
-        ]
-      }
-    ]
-  }
-  ```
-- ```sqlc generate```
+        }
+      ],
+      "sql": [
+        {
+          "engine": "sqlite",
+          "schema": "schema.sql",
+          "queries": "query.sql",
+          "codegen": [
+            {
+              "out": "src/Database",
+              "plugin": "fsharp",
+              "options": {
+                "namespace": "MyApp.Database"
+              }
+            }
+          ]
+        }
+      ]
+    }
+    ```
+5. Run `sqlc generate`
 
-See the example folder for a sample setup.
+See the `examples/` folder for sample setups.
 
+## Generated code
 
+The generated `DB` class takes an `IDbConnection` and exposes a method per query:
 
-### fsharp config options
-`namespace`: The namespace to use for the generated code.\
-`out`: Output directory for generated code.\
-`emit_exact_table_names`: If true, use the exact table name for generated models. Otherwise, guess a singular form. Defaults to *false*.\
-`async`: If true, all query functions generated will be async. Defaults to *false*.
+```fsharp
+open System.Data
 
+let conn : IDbConnection = (* your connection *)
+let db = DB(conn)
 
-### TODO
-- Support for enumerated column types.
-- Optionally generate classes instead of records
+// :one queries return ValueOption<T>
+let author = db.GetAuthor(id = 1L)
+
+// :many queries return ResizeArray<T>
+let authors = db.ListAuthors()
+
+// :exec queries return int (rows affected)
+let rows = db.DeleteAuthor(id = 1L)
+```
+
+Nullable columns map to F# `option` types. Nullable parameters become optional arguments:
+
+```fsharp
+db.CreateAuthor(name = "Alice", bio = "Writer")   // bio is ?bio: string
+```
+
+## Config options
+
+| Option | JSON key | Type | Description |
+|--------|----------|------|-------------|
+| Namespace | `namespace` | string | F# namespace for generated code |
+| Output directory | `out` | string | Where to write generated files |
+| Exact table names | `emit_exact_table_names` | bool | Skip singularization of table names for model types. Default: `false` |
+| Exclude from inflection | `inflection_exclude_table_names` | string[] | Table names to exclude from automatic singularization |
+
+## Features
+
+- **Plain ADO.NET** -- generated code depends only on `System.Data` interfaces, no third-party libraries required
+- **sqlite-vec / F32_BLOB** -- first-class support for `float32[]` vector columns via `MemoryMarshal`
+- **`sqlc.slice()`** -- dynamic `IN (...)` clause expansion with runtime parameter binding
+- **F# keyword escaping** -- reserved words like `type` are automatically wrapped in double backticks
+- **Nullable handling** -- nullable columns become `option` types; nullable parameters become optional arguments
+
+## Development
+
+```bash
+# Build the WASM plugin (requires Docker + tinygo)
+bash build.sh
+
+# Full pipeline: build WASM, generate code, format, test
+bash test.sh
+
+# Run F# tests only
+dotnet test  # from test/
+
+# Format generated F# code
+fantomas .   # from test/
+```
