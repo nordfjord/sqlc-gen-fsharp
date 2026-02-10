@@ -73,6 +73,13 @@ func sqliteType(req *plugin.CodeGenRequest, col *plugin.Column) (string, string,
 			return "string option", "GetString", "stringOrNone", false
 		}
 
+	case strings.HasPrefix(columnType, "f32_blob"):
+		if notNull {
+			return "float32[]", "GetF32Blob", "bytes", false
+		} else {
+			return "float32[] option", "GetF32Blob", "bytesOrNone", false
+		}
+
 	case strings.HasPrefix(columnType, "decimal"), columnType == "numeric":
 		if notNull {
 			return "decimal", "GetDecimal", "decimal", false

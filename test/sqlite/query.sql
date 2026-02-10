@@ -32,3 +32,14 @@ SELECT count(*) as cnt, sum(id) as total_books from authors;
 -- name: DbString :one
 SELECT 'Hello world' as str ;
 
+-- name: GetEmbedding :one
+SELECT * FROM embeddings
+WHERE id = @id LIMIT 1;
+
+-- name: CreateEmbedding :one
+INSERT INTO embeddings (
+  embedding
+) VALUES (
+  @embedding
+)
+RETURNING *;

@@ -41,7 +41,7 @@ type DB (conn: IDbConnection) =
   {%- for _, line := range query.Comments -%}
   ///{%s= line %}
   {%- endfor -%}
-  member this.{%s query.ConstantName %}  ({%s query.Arg.Args() %}) =
+  member _.{%s query.ClassName %}  ({%s query.Arg.Args() %}) =
 
     {%- for _, line := range pipelines -%}
     {%s= line %}

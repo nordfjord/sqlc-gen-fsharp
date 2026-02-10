@@ -4,6 +4,7 @@
 namespace SAuthors
 
 open System
+open System.Runtime.InteropServices
 open System.Data
 open SAuthors.Readers
 
@@ -66,10 +67,38 @@ WHERE id = @id
     SELECT 'Hello world' as str
   """
 
+  [<Literal>]
+  let getEmbedding =
+    """
+    ;
+
+SELECT id, embedding FROM embeddings
+WHERE id = @id LIMIT 1
+  """
+
+  [<Literal>]
+  let createEmbedding =
+    """
+    INSERT INTO embeddings (
+  embedding
+) VALUES (
+  @embedding
+)
+RETURNING id, embedding
+  """
+
+  [<Literal>]
+  let searchEmbeddings =
+    """
+    SELECT e.id, e.embedding
+FROM embeddings e
+JOIN vector_top_k('embeddings_idx', ?1, ?2) AS vt ON e.id = vt.rowid
+  """
+
 [<RequireQualifiedAccessAttribute>]
 type DB(conn: IDbConnection) =
 
-  member this.getAuthor2(id: int) =
+  member _.GetAuthor2(id: int) =
 
     use cmd = conn.CreateCommand()
     cmd.CommandText <- Sqls.getAuthor2
@@ -80,7 +109,7 @@ type DB(conn: IDbConnection) =
     use rdr = cmd.ExecuteReader()
     if rdr.Read() then ValueSome(getAuthor2RowReader rdr) else ValueNone
 
-  member this.getAuthor(id: int) =
+  member _.GetAuthor(id: int) =
 
     use cmd = conn.CreateCommand()
     cmd.CommandText <- Sqls.getAuthor
@@ -91,7 +120,7 @@ type DB(conn: IDbConnection) =
     use rdr = cmd.ExecuteReader()
     if rdr.Read() then ValueSome(authorReader rdr) else ValueNone
 
-  member this.listAuthors() =
+  member _.ListAuthors() =
 
     use cmd = conn.CreateCommand()
     cmd.CommandText <- Sqls.listAuthors
@@ -103,7 +132,7 @@ type DB(conn: IDbConnection) =
 
     List.rev results
 
-  member this.createAuthor(name: string, ?bio: string) =
+  member _.CreateAuthor(name: string, ?bio: string) =
 
     use cmd = conn.CreateCommand()
     cmd.CommandText <- Sqls.createAuthor
@@ -125,7 +154,7 @@ type DB(conn: IDbConnection) =
     use rdr = cmd.ExecuteReader()
     if rdr.Read() then ValueSome(authorReader rdr) else ValueNone
 
-  member this.deleteAuthor(id: int) =
+  member _.DeleteAuthor(id: int) =
 
     use cmd = conn.CreateCommand()
     cmd.CommandText <- Sqls.deleteAuthor
@@ -135,23 +164,62 @@ type DB(conn: IDbConnection) =
 
     cmd.ExecuteNonQuery()
 
-  member this.countAuthors() =
+  member _.CountAuthors() =
 
     use cmd = conn.CreateCommand()
     cmd.CommandText <- Sqls.countAuthors
     use rdr = cmd.ExecuteReader()
     if rdr.Read() then ValueSome(rdr.GetInt32(rdr.GetOrdinal("cnt"))) else ValueNone
 
-  member this.totalBooks() =
+  member _.TotalBooks() =
 
     use cmd = conn.CreateCommand()
     cmd.CommandText <- Sqls.totalBooks
     use rdr = cmd.ExecuteReader()
     if rdr.Read() then ValueSome(totalBooksRowReader rdr) else ValueNone
 
-  member this.dbString() =
+  member _.DbString() =
 
     use cmd = conn.CreateCommand()
     cmd.CommandText <- Sqls.dbString
     use rdr = cmd.ExecuteReader()
     if rdr.Read() then ValueSome(rdr.GetString(rdr.GetOrdinal("str"))) else ValueNone
+
+  member _.GetEmbedding(id: int) =
+
+    use cmd = conn.CreateCommand()
+    cmd.CommandText <- Sqls.getEmbedding
+
+    cmd.Parameters.Add(cmd.CreateParameter(ParameterName = "@id", Value = box id))
+    |> ignore
+
+    use rdr = cmd.ExecuteReader()
+    if rdr.Read() then ValueSome(embeddingReader rdr) else ValueNone
+
+  member _.CreateEmbedding(embedding: float32[]) =
+
+    use cmd = conn.CreateCommand()
+    cmd.CommandText <- Sqls.createEmbedding
+
+    cmd.Parameters.Add(
+      cmd.CreateParameter(
+        ParameterName = "@embedding",
+        Value = box (MemoryMarshal.AsBytes<float32>(ReadOnlySpan<float32>(embedding)).ToArray())
+      )
+    )
+    |> ignore
+
+    use rdr = cmd.ExecuteReader()
+    if rdr.Read() then ValueSome(embeddingReader rdr) else ValueNone
+
+  member _.SearchEmbeddings() =
+
+    use cmd = conn.CreateCommand()
+    cmd.CommandText <- Sqls.searchEmbeddings
+    use rdr = cmd.ExecuteReader()
+    let mutable results = []
+
+    while rdr.Read() do
+      results <- (embeddingReader rdr) :: results
+
+    List.rev results

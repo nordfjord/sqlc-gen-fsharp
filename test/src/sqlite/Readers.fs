@@ -4,6 +4,7 @@
 namespace SAuthors
 
 open System
+open System.Runtime.InteropServices
 open System.Data
 
 module Readers =
@@ -41,4 +42,13 @@ module Readers =
       TotalBooksRow.Cnt = r.GetInt32(r.GetOrdinal("cnt"))
       TotalBooks =
         if r.IsDBNull(r.GetOrdinal("total_books")) then None else Some(r.GetDouble(r.GetOrdinal("total_books")))
+    }
+
+  let embeddingReader (r: IDataReader) : Embedding =
+    {
+      Embedding.Id = r.GetInt32(r.GetOrdinal("id"))
+      Embedding =
+        MemoryMarshal
+          .Cast<byte, float32>(ReadOnlySpan<byte>(r.GetValue(r.GetOrdinal("embedding")) :?> byte[]))
+          .ToArray()
     }

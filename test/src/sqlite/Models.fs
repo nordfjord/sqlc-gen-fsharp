@@ -4,6 +4,7 @@
 namespace SAuthors
 
 open System
+open System.Runtime.InteropServices
 open System.Data
 
 type Author =
@@ -20,6 +21,8 @@ type Author =
     Married: bool option
     Payable: decimal option
   }
+
+type Embedding = { Id: int; Embedding: float32[] }
 
 type GetAuthor2Row = { Id: int; Name: string; Bio: string option }
 

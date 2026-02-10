@@ -12,3 +12,8 @@ CREATE TABLE authors (
   married BOOL,
   payable DECIMAL
 );
+
+CREATE TABLE embeddings (
+  id   INTEGER PRIMARY KEY,
+  embedding F32_BLOB(1536) NOT NULL
+);

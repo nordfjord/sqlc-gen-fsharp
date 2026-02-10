@@ -393,6 +393,8 @@ func readerGetExpr(readerTyp string, varName string, ordExpr string) string {
 		return fmt.Sprintf("DateTimeOffset(%s.GetDateTime(%s))", varName, ordExpr)
 	case "GetBytes":
 		return fmt.Sprintf("%s.GetValue(%s) :?> byte[]", varName, ordExpr)
+	case "GetF32Blob":
+		return fmt.Sprintf("MemoryMarshal.Cast<byte, float32>(ReadOnlySpan<byte>(%s.GetValue(%s) :?> byte[])).ToArray()", varName, ordExpr)
 	default:
 		return fmt.Sprintf("%s.%s(%s)", varName, readerTyp, ordExpr)
 	}
@@ -420,7 +422,13 @@ func (t TmplCtx) ConnPipeline(q Query) []string {
 	if !q.Arg.isEmpty() {
 		for _, f := range q.Arg.Struct.Fields {
 			var valueExpr string
-			if f.Type.IsNull {
+			if f.Type.ReaderTyp == "GetF32Blob" {
+				if f.Type.IsNull {
+					valueExpr = fmt.Sprintf("match %s with Some v -> box (MemoryMarshal.AsBytes<float32>(ReadOnlySpan<float32>(v)).ToArray()) | None -> box DBNull.Value", f.Name)
+				} else {
+					valueExpr = fmt.Sprintf("box (MemoryMarshal.AsBytes<float32>(ReadOnlySpan<float32>(%s)).ToArray())", f.Name)
+				}
+			} else if f.Type.IsNull {
 				valueExpr = fmt.Sprintf("match %s with Some v -> box v | None -> box DBNull.Value", f.Name)
 			} else {
 				valueExpr = fmt.Sprintf("box %s", f.Name)

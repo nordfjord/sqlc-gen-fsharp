@@ -86,6 +86,9 @@ func (i *Importer) modelImports() []string {
 
 func stdImports(uses func(name string) bool) []string {
 	out := []string{"System"}
+	if uses("float32[]") {
+		out = append(out, "System.Runtime.InteropServices")
+	}
 	return out
 }
 
