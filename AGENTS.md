@@ -6,11 +6,8 @@
 # Build the WASM plugin and run all tests (full pipeline)
 bash test.sh
 
-# Build WASM only (uses Docker + tinygo)
+# Build WASM
 bash build.sh
-
-# Build native Go binary
-cd plugin && go build -o ~/bin/sqlc-gen-fsharp ./main.go
 
 # Regenerate Go code from quicktemplate (.qtpl) files
 qtc  # run from internal/templates/

@@ -111,7 +111,7 @@ db.CreateAuthor(name = "Alice", bio = "Writer")   // bio is ?bio: string
 ## Development
 
 ```bash
-# Build the WASM plugin (requires Docker + tinygo)
+# Build the WASM plugin
 bash build.sh
 
 # Full pipeline: build WASM, generate code, format, test

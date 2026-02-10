@@ -9,6 +9,13 @@ open System.Data
 
 module Readers =
 
+  let totalBooksRowReader (r: IDataReader) : TotalBooksRow =
+    {
+      TotalBooksRow.Cnt = r.GetInt64(r.GetOrdinal("cnt"))
+      TotalBooks =
+        if r.IsDBNull(r.GetOrdinal("total_books")) then None else Some(r.GetDouble(r.GetOrdinal("total_books")))
+    }
+
   let embeddingReader (r: IDataReader) : Embedding =
     {
       Embedding.Id = r.GetInt64(r.GetOrdinal("id"))
@@ -51,11 +58,4 @@ module Readers =
       Disabled = if r.IsDBNull(r.GetOrdinal("disabled")) then None else Some(r.GetBoolean(r.GetOrdinal("disabled")))
       Married = if r.IsDBNull(r.GetOrdinal("married")) then None else Some(r.GetBoolean(r.GetOrdinal("married")))
       Payable = if r.IsDBNull(r.GetOrdinal("payable")) then None else Some(r.GetDecimal(r.GetOrdinal("payable")))
-    }
-
-  let totalBooksRowReader (r: IDataReader) : TotalBooksRow =
-    {
-      TotalBooksRow.Cnt = r.GetInt64(r.GetOrdinal("cnt"))
-      TotalBooks =
-        if r.IsDBNull(r.GetOrdinal("total_books")) then None else Some(r.GetDouble(r.GetOrdinal("total_books")))
     }
